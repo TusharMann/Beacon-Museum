@@ -7,15 +7,18 @@ import android.os.RemoteException;
 import android.support.v4.app.NotificationCompat;
 import android.util.Log;
 
+import org.altbeacon.beacon.Beacon;
 import org.altbeacon.beacon.BeaconConsumer;
 import org.altbeacon.beacon.BeaconManager;
 import org.altbeacon.beacon.BeaconParser;
 import org.altbeacon.beacon.Identifier;
 import org.altbeacon.beacon.MonitorNotifier;
+import org.altbeacon.beacon.RangeNotifier;
 import org.altbeacon.beacon.Region;
 import org.altbeacon.beacon.powersave.BackgroundPowerSaver;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 
@@ -29,12 +32,15 @@ public class MyApp extends Application implements BeaconConsumer {
     private static MyApp instance = null;
     private BeaconManager beaconManager;
     private static final Identifier nameSpaceId = Identifier.parse("0x5dc33487f02e477d4058");
+    protected static final String TAG = "RangingActivity";
 
     public CopyOnWriteArrayList<String> regionNameList;
     public CopyOnWriteArrayList<Region> regionList;
     public HashMap<String,Region> ssnRegionMap;
     public OnListRefreshListener onListRefreshListener;
     public MainActivity context;
+    private BackgroundPowerSaver backgroundPowerSaver;
+
 
     public interface OnListRefreshListener {
         void onListRefresh();
@@ -47,6 +53,7 @@ public class MyApp extends Application implements BeaconConsumer {
     @Override
     public void onCreate() {
         super.onCreate();
+        backgroundPowerSaver = new BackgroundPowerSaver(this);
         instance = this;
         //check signed in
 //        if (UserUtil.isUserLoggedIn()) {
@@ -73,7 +80,7 @@ public class MyApp extends Application implements BeaconConsumer {
 
         beaconManager = BeaconManager.getInstanceForApplication(this);
         beaconManager.getBeaconParsers().add(new BeaconParser().
-                setBeaconLayout(BeaconParser.EDDYSTONE_UID_LAYOUT));
+                setBeaconLayout("m:2-3=beac,i:4-19,i:20-21,i:22-23,p:24-24,d:25-25"));
         new BackgroundPowerSaver(this);
         beaconManager.bind(this);
 
@@ -81,6 +88,20 @@ public class MyApp extends Application implements BeaconConsumer {
 
     @Override
     public void onBeaconServiceConnect() {
+        beaconManager.addRangeNotifier(new RangeNotifier() {
+            @Override
+            public void didRangeBeaconsInRegion(Collection<Beacon> beacons, Region region) {
+                if (beacons.size() > 0) {
+                    Log.i(TAG, "The first beacon I see is about "+beacons.iterator().next().getDistance()+" meters away.");
+                }
+            }
+        });
+
+        try {
+            beaconManager.startRangingBeaconsInRegion(new Region("myRangingUniqueId", null, null, null));
+        } catch (RemoteException e) {    }
+
+
         beaconManager.addMonitorNotifier(new MonitorNotifier() {
             @Override
             public void didEnterRegion(Region region) {
@@ -96,6 +117,7 @@ public class MyApp extends Application implements BeaconConsumer {
             public void didDetermineStateForRegion(int i, Region region) {
                 String regionName = region.getUniqueId();
                 String beaconSSN = region.getId2().toHexString();
+
                 switch (i){
                     case INSIDE:
                         Log.i("TAG","Enter " + regionName);
@@ -133,10 +155,10 @@ public class MyApp extends Application implements BeaconConsumer {
 
 
         try {
-            for(String key:ssnRegionMap.keySet()) {
-                Region region = ssnRegionMap.get(key);
-                beaconManager.startMonitoringBeaconsInRegion(region);
-            }
+//            for(String key:ssnRegionMap.keySet()) {
+//                Region region = ssnRegionMap.get(key);
+//                beaconManager.startMonitoringBeaconsInRegion(region);
+                beaconManager.startMonitoringBeaconsInRegion(new Region("Unique Id",null,null,null));
         } catch (RemoteException e) {
             e.printStackTrace();
         }
